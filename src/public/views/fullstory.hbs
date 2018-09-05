@@ -1,0 +1,11 @@
+<html>
+	{{> Head}}
+	<body>
+        {{> Navbar fullstory='active'}}
+        <p>
+            {{#each databaseResult}}
+                {{story_text}}
+            {{/each}}
+        </p>
+	</body>
+</html>
