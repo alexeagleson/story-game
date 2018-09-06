@@ -1,4 +1,5 @@
 import SQLHandler from "./model/SQLHandler";
+import User from './model/User';
 
 const express = require("express");
 const path = require("path");
@@ -6,6 +7,13 @@ const hbs = require("hbs");
 const bodyParser = require('body-parser')
 const uniqid = require('uniqid');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+
+/// jwt secret unsecure
+// database queries unsecure
+// cookie-parser for secure cookies?
+
+const jwtSecret = 'abc';
 
 const saltRounds = 10;
 
@@ -80,6 +88,21 @@ class App {
       res.status(200).render(publicPath + "/views/register.hbs");
     });
 
+    router.get("/dashboard", (req, res) => {
+      if (!req.headers.cookie) {
+        return res.status(200).render(publicPath + "/views/index.hbs", { status: `Not logged in.` });
+      }
+      const token = req.headers.cookie.split('=')[1];
+      const decodedID = jwt.verify(token, jwtSecret);
+      this.sql.runQuery(`SELECT username FROM users WHERE username = '${decodedID}'`)
+        .then(result => {
+          res.status(200).render(publicPath + "/views/index.hbs", { status: `Logged in as ${result[0].username}` });
+        })
+        .catch(err => {
+          console.log(err);
+        });
+    });
+
     // POST
 
     router.post("/addstory", (req, res) => {
@@ -101,7 +124,9 @@ class App {
           if (result.length > 0) {
             bcrypt.compare(req.body.password, result[0].password).then((compareResult) => {
               if (compareResult) {
-                res.status(200).render(publicPath + "/views/index.hbs", { status: `Logged in as: ${req.body.username}.` });
+                const currentUser = new User(req.body.username);
+                currentUser.generateAuthToken(jwtSecret);
+                res.header('x-auth', currentUser.token).send({ token: currentUser.token });
               } else {
                 res.status(200).render(publicPath + "/views/login.hbs", { status: 'Password did not match.' });
               }

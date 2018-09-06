@@ -19,6 +19,7 @@
     "dotenv": "^6.0.0",
     "express": "^4.16.3",
     "hbs": "^4.0.1",
+    "jsonwebtoken": "^8.3.0",
     "mysql": "^2.16.0",
     "node-sass": "^4.9.3",
     "uniqid": "^5.0.3"
