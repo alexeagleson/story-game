@@ -1,46 +1,59 @@
+const updateWordCount = () => {
+  const wordCount = (<HTMLInputElement>document.getElementById('story')).value.length;
+  const warningElement = document.getElementById('word-count');
+  warningElement.innerHTML = `Number of characters: ${wordCount.toString()}/500`;
+}
 
+const addStory = (finishStory = false) => {
+  const storyInput = (<HTMLInputElement>document.getElementById('story')).value;
+  const numWordsInput = (<HTMLInputElement>document.getElementById('numWords')).value;
+  const storyIDInput = (<HTMLInputElement>document.getElementById('storyID')).value;
 
-const newPostRequest = url => {
-  const xhr = new XMLHttpRequest();
-  xhr.open("POST", url, true);
-  xhr.setRequestHeader("Content-Type", "application/json");
-  return xhr;
-};
+  const titleElement = (<HTMLInputElement>document.getElementById('title'));
+  const titleInput = titleElement ? titleElement.value : null;
 
-
-const newGetRequest = url => {
-  const xhr = new XMLHttpRequest();
-  xhr.open("GET", url, true);
-  return xhr;
-};
-
-const createTable = () => {
-  const xhr = newPostRequest("/create");
-  xhr.send(JSON.stringify({ value: "hello" }));
-};
-
-const getStory = () => {
-  fetch('/getStory', { method: 'GET' })
-      .then((response) => {
-          if (response.status !== 200) throw Error(`${response.status} ${response.statusText}`);
-      })
-      .catch(error => console.error(`Fetch Error =\n`, error));
-};
-
-const submitStory = () => {
-  const storyText = (<HTMLInputElement>document.getElementById("story-field")).value;
-  fetch(`/addStory`, {
+  fetch(`/addstory`, {
     method: "POST",
     headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify({ story: storyText })
+    body: JSON.stringify({ story: storyInput, numWords: numWordsInput, storyID: storyIDInput, finishStory, title: titleInput })
   })
-    .then(response => console.log(response))
+    .then(response => response.json())
+    .then(data => {
+      if (data.error) {
+        document.getElementById('error-addstory').innerHTML = data.error;
+        return;
+      };
+      document.location.href = '/';
+    })
     .catch(error => console.error(`Fetch Error =\n`, error));
 };
 
+const finishStory = () => addStory(true);
 
+const register = () => {
+  const usernameInput = (<HTMLInputElement>document.getElementById('username')).value;
+  const passwordInput = (<HTMLInputElement>document.getElementById('password')).value;
 
-const postLogin = () => {
+  fetch(`/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ username: usernameInput, password: passwordInput })
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (data.error) {
+        (<HTMLInputElement>document.getElementById('username')).value = '';
+        (<HTMLInputElement>document.getElementById('password')).value = '';
+        document.getElementById('error-register').innerHTML = data.error;
+        return;
+      };
+      document.cookie = `jwtCookie=${data.token}`;
+      document.location.href = '/dashboard';
+    })
+    .catch(error => console.error(`Fetch Error =\n`, error));
+};
+
+const login = () => {
   const usernameInput = (<HTMLInputElement>document.getElementById('username')).value;
   const passwordInput = (<HTMLInputElement>document.getElementById('password')).value;
 
@@ -51,27 +64,19 @@ const postLogin = () => {
   })
     .then(response => response.json())
     .then(data => {
-      localStorage.setItem('jwt', data.token);
+      if (data.error) {
+        (<HTMLInputElement>document.getElementById('username')).value = '';
+        (<HTMLInputElement>document.getElementById('password')).value = '';
+        document.getElementById('error-login').innerHTML = data.error;
+        return;
+      };
       document.cookie = `jwtCookie=${data.token}`;
-
       document.location.href = '/dashboard';
-
-      // const xhr = newGetRequest('/dashboard')
-      // xhr.setRequestHeader('x-auth', localStorage.getItem('jwt'));
-      // xhr.send(JSON.stringify({ value: "hello" }));
-
-      // fetch(`/dashboard`, {
-      //   method: "GET",
-      //   headers: { 'x-auth': localStorage.getItem('jwt') }
-      // })
-      // .then(response => {
-      //   document.location.href = '/dashboard';
-      // })
-      // .catch(error => console.error(`Fetch Error =\n`, error));
-
-
-
-
     })
     .catch(error => console.error(`Fetch Error =\n`, error));
+};
+
+const logout = () => {
+  document.cookie = "jwtCookie=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+  document.location.href = '/';
 };

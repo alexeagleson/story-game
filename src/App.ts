@@ -1,4 +1,5 @@
 import SQLHandler from "./model/SQLHandler";
+import Story from './model/Story';
 import User from './model/User';
 
 const express = require("express");
@@ -12,12 +13,31 @@ const jwt = require('jsonwebtoken');
 /// jwt secret unsecure
 // database queries unsecure
 // cookie-parser for secure cookies?
+// escape chars for quotes
 
 const jwtSecret = 'abc';
 
 const saltRounds = 10;
 
 const publicPath = path.join(__dirname, "public");
+
+const validateText = (textValue, formName) => {
+  if (!(typeof textValue === 'string'))  return `${formName} must be text.`;
+  if (textValue.length === 0) return `${formName} cannot be empty.`;
+  // const matchValidBasicUsername = textValue.match(/^[a-zA-Z0-9_ .-]*$/);
+  const matchValidExtended = textValue.match(/^[a-zA-Z0-9_ .,!;()$-]*$/);
+  if (!matchValidExtended) return `${formName} cannot contain any weird characters only these: A-Z 0-9 _.,!;()$-.`; 
+  return true;
+};
+
+const validateNumber = (numberValue, formName, min, max) => {
+  if (isNaN(numberValue)) return `${formName} must be a number.`;
+  if (numberValue % 1 !== 0) return `${formName} cannot be a decimal or fraction.`;
+  if (min && max) {
+      if (numberValue < min || numberValue > max) return `${formName} must be between ${min} and ${max}.`;
+  }
+  return true;
+};
 
 class App {
   public express;
@@ -38,6 +58,7 @@ class App {
     hbs.registerPartials(publicPath + "/views/partials");
 
     hbs.registerHelper('lastXwords', (storyText, numWords) => {
+      if (!storyText || !numWords) return new hbs.SafeString(`<p>(New story)</p>`);
       let words = '';
       const storyArray = storyText.split(' ');
       for (let i = (storyArray.length - numWords); i < storyArray.length; i += 1) {
@@ -50,72 +71,128 @@ class App {
   private mountRoutes(): void {
     const router = express.Router();
 
-    router.get("/", (req, res) => {
-      res.status(200).render(publicPath + "/views/index.hbs");
-    });
-
-    router.get("/create", (req, res) => {
-      this.sql.runQuery(`CREATE TABLE story_portions (story_id VARCHAR(255), story_text TEXT, num_words INT, date_added DATETIME)`)
-        .then(result => { res.status(200).render(publicPath + "/views/index.hbs"); })
-        .catch(err => { console.log(err); });
-    });
-
-    router.get("/addstory", (req, res) => {
-      this.sql.runQuery(`SELECT * FROM story_portions ORDER BY date_added DESC LIMIT 1`)
-        .then(result => {
-          res.status(200).render(publicPath + "/views/addstory.hbs", { databaseResult: result });
-        })
-        .catch(err => {
-          console.log(err);
-        });
-    });
-
-    router.get("/fullstory", (req, res) => {
-      this.sql.runQuery(`SELECT * FROM story_portions`)
-        .then(result => {
-          res.status(200).render(publicPath + "/views/fullstory.hbs", { databaseResult: result });
-        })
-        .catch(err => {
-          console.log(err);
-        });
-    });
-
-    router.get("/login", (req, res) => {
-      res.status(200).render(publicPath + "/views/login.hbs");
-    });
-
-    router.get("/register", (req, res) => {
-      res.status(200).render(publicPath + "/views/register.hbs");
-    });
-
-    router.get("/dashboard", (req, res) => {
-      if (!req.headers.cookie) {
-        return res.status(200).render(publicPath + "/views/index.hbs", { status: `Not logged in.` });
-      }
-      const token = req.headers.cookie.split('=')[1];
+    const authenticate = (req, res, next) => {
+      const token = req.headers.cookie ? req.headers.cookie.split('=')[1] : null;
+      if (!token) return next();
       const decodedID = jwt.verify(token, jwtSecret);
       this.sql.runQuery(`SELECT username FROM users WHERE username = '${decodedID}'`)
         .then(result => {
-          res.status(200).render(publicPath + "/views/index.hbs", { status: `Logged in as ${result[0].username}` });
+          req.username = result[0].username;
+          next();
+        })
+        .catch(err => res.status(401).send());
+    };
+
+    router.get("/", authenticate, (req, res) => {
+      res.status(200).render(publicPath + "/views/index.hbs", { user: req.username });
+    });
+
+    router.get("/addstory", authenticate, (req, res) => {
+      if (!req.username) return res.status(401).send();
+      let storyID = null;
+
+      this.sql.runQuery(`SELECT * FROM stories WHERE finished = ${false}`)
+        .then(currentStoryResult => {
+          if (currentStoryResult.length > 0) storyID = currentStoryResult[currentStoryResult.length - 1].id
+          
+          this.sql.runQuery(`SELECT * FROM story_portions WHERE story_id = '${storyID}' ORDER BY date_added DESC`)
+          .then(storyPortionResult => {
+            let totalLength = 0;
+            if (storyPortionResult.length > 0) {
+              const reducer = (accumulator, storyPortion) => accumulator + storyPortion.story_text.length;
+              totalLength = storyPortionResult.reduce(reducer, 0);
+            }
+            const finishButton = totalLength > 1000 ? true : false;
+
+            const hbsArgs = {
+              user: req.username,
+              storyPiece: storyPortionResult[0],
+              storyID,
+              titleNeeded: !storyID,
+              finishButton,
+            }
+            res.status(200).render(publicPath + "/views/addstory.hbs", hbsArgs);
+          })
+          .catch(err => { console.log(err); });
+        })
+        .catch(err => { console.log(err); }); 
+    });
+
+    router.get("/fullstory", authenticate, (req, res) => {
+      if (!req.username) return res.status(401).send();
+      
+      this.sql.runQuery(`SELECT * FROM story_portions INNER JOIN stories ON story_portions.story_id = stories.id WHERE stories.finished = 1 ORDER BY story_portions.date_added ASC`)
+        .then(result => {
+          const allStories = [];
+          if (result.length > 0) {
+            let currentStory = '';
+            let currentTitle = result[0].title;
+  
+            result.forEach((storyPortion) => {
+              if (currentTitle !== storyPortion.title) {
+                allStories.push({title: currentTitle, story: currentStory});
+                currentTitle = storyPortion.title;
+                currentStory = '';
+              }
+              currentStory = `${currentStory} ${storyPortion.story_text}`;
+            });
+            allStories.push({title: currentTitle, story: currentStory});
+            allStories.reverse();
+          }
+          res.status(200).render(publicPath + "/views/fullstory.hbs", { user: req.username, allStories });
         })
         .catch(err => {
           console.log(err);
         });
     });
 
+    router.get("/login", authenticate, (req, res) => {
+      res.status(200).render(publicPath + "/views/login.hbs", { user: req.username, registerOrLoginFunction: 'login()' });
+    });
+
+    router.get("/register", authenticate, (req, res) => {
+      res.status(200).render(publicPath + "/views/register.hbs", { user: req.username, registerOrLoginFunction: 'register()' });
+    });
+
+    router.get("/dashboard", authenticate, (req, res) => {
+      if (!req.username) return res.status(401).send();
+      res.status(200).render(publicPath + "/views/dashboard.hbs", { user: req.username, status: `Logged in as ${req.username}` });
+    });
+
+    // BUILD DATABASE
+
+    // router.get("/create", authenticate, (req, res) => {
+    //   this.sql.runQuery(`CREATE TABLE story_portions (story_id VARCHAR(255), story_text TEXT, num_words INT, date_added DATETIME, PRIMARY KEY (story_id))`)
+    //     .then(result => { res.status(200).render(publicPath + "/views/index.hbs"); })
+    //     .catch(err => { console.log(err); });
+    // });
+
     // POST
 
-    router.post("/addstory", (req, res) => {
+    router.post("/addstory", authenticate, (req, res) => {
+      let formError = validateText(req.body.story, 'Story');
+      if (typeof formError === 'string') return res.header('x-auth', 'error').send({ error: formError });
+
+      if (!req.body.storyID) {
+        let formError = validateText(req.body.title, 'Title');
+        if (typeof formError === 'string') return res.header('x-auth', 'error').send({ error: formError });
+      }
+
       const currentDateAndTime = new Date().toISOString().split("T");
       const currentDateAndTimeSqlFormat = `${currentDateAndTime[0]} ${currentDateAndTime[1].split(".")[0]}`;
 
-      this.sql.runQuery(`INSERT INTO story_portions (story_id, story_text, num_words, date_added) VALUES ('${uniqid()}', '${req.body.story}', ${req.body.numWords}, '${currentDateAndTimeSqlFormat}')`)
-        .then(result => {
-          res.status(200).render(publicPath + "/views/index.hbs");
+      const title = req.body.title;
+      const storyID = req.body.storyID || uniqid();
+
+      this.sql.runQuery(`INSERT INTO stories (id, title, finished) VALUES ('${storyID}', '${title}', ${false}) ON DUPLICATE KEY UPDATE finished = ${req.body.finishStory}`)
+        .then(insertResult => {
+          this.sql.runQuery(`INSERT INTO story_portions (id, story_text, num_words, date_added, story_id, author_username) VALUES ('${uniqid()}', '${req.body.story}', ${req.body.numWords}, '${currentDateAndTimeSqlFormat}', '${storyID}', '${req.username}')`)
+          .then(result => {
+            res.header('x-auth', 'success').send({});
+          })
+          .catch(err => { console.log(err); });
         })
-        .catch(err => {
-          console.log(err);
-        });
+        .catch(err => { console.log(err); });
     });
 
     router.post("/login", (req, res) => {
@@ -128,11 +205,11 @@ class App {
                 currentUser.generateAuthToken(jwtSecret);
                 res.header('x-auth', currentUser.token).send({ token: currentUser.token });
               } else {
-                res.status(200).render(publicPath + "/views/login.hbs", { status: 'Password did not match.' });
+                res.header('x-auth', 'error').send({ error: 'Password did not match.' });
               }
             });
           } else {
-            res.status(200).render(publicPath + "/views/login.hbs", { status: 'Username not found.' });
+            res.header('x-auth', 'error').send({ error: 'Username not found.' });
           }
         })
         .catch(err => {
@@ -141,15 +218,20 @@ class App {
     });
 
     router.post("/register", (req, res) => {
+      let formError = validateText(req.body.username, 'Username');
+      if (typeof formError === 'string') return res.header('x-auth', 'error').send({ error: formError });
+
       this.sql.runQuery(`SELECT username FROM users WHERE username = '${req.body.username}'`)
         .then(result => {
           if (result.length > 0) {
-            res.status(200).render(publicPath + "/views/register.hbs", { status: 'Username already registered.' });
+            res.header('x-auth', 'error').send({ error: 'Username already registered.' });
           } else {
             bcrypt.hash(req.body.password, saltRounds).then((hash) => {
               this.sql.runQuery(`INSERT INTO users (username, password) VALUES ('${req.body.username}', '${hash}')`)
               .then(result => {
-                res.status(200).render(publicPath + "/views/index.hbs", { status: `Registered user: ${req.body.username}.` });
+                const currentUser = new User(req.body.username);
+                currentUser.generateAuthToken(jwtSecret);
+                res.header('x-auth', currentUser.token).send({ token: currentUser.token });
               })
               .catch(err => {
                 console.log(err);
@@ -157,9 +239,7 @@ class App {
             });
           }
         })
-        .catch(err => {
-          console.log(err);
-        });
+        .catch(err => { console.log(err); });
     });
 
     this.express.use("/", router);

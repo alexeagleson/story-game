@@ -3,8 +3,9 @@
 	<body>
         {{> Navbar fullstory='active'}}
         <p>
-            {{#each databaseResult}}
-                {{story_text}}
+            {{#each allStories}}
+                <h2>{{title}}</h2>
+                <p>{{story}}</p>
             {{/each}}
         </p>
 	</body>

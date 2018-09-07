@@ -1,7 +1,16 @@
-{{!-- <form action="/{{loginOrRegister}}" method="post"> --}}
-    <label for="username">Username</label>
-    <input id="username" name="username" type="text"></input>
-    <label for="password">Password</label>
-    <input id="password" name="password" type="password"></input>
-    <input type="submit" onclick="postLogin()" value="Submit">
-{{!-- </form> --}}
+<div id='login-submit-div'>
+    <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" class="form-control" id="username" name="username">
+        <label for="password">Password</label>
+        <input type="password" class="form-control" id="password" name="password">
+    </div>
+    <button id="login-submit" type="submit" class="btn btn-primary" onclick="{{registerOrLoginFunction}}">Submit</button>
+</div>
+
+<script>
+    document.getElementById('login-submit-div').addEventListener('keyup', (event) => {
+        event.preventDefault();
+        if (event.keyCode === 13) document.getElementById('login-submit').click();
+    });
+</script>
