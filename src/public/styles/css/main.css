@@ -1,2 +1,16 @@
 a {
   cursor: pointer; }
+
+#story-submit-div {
+  padding-top: 20px; }
+
+#story {
+  height: 200px; }
+
+.container {
+  padding-top: 30px; }
+
+.warning-text {
+  padding-top: 10px;
+  color: red;
+  font-weight: bold; }

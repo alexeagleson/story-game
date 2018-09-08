@@ -1,8 +1,12 @@
 <html>
-	{{> Head}}
-	<body>
-        {{> Navbar register='active'}}
+{{> Head}}
+
+<body>
+	{{> Navbar register='active'}} 
+	<div class="container">
 		{{> LoginRegisterForm loginOrRegister='register'}}
-		<p id="error-register"></p>
-	</body>
+		<p id="error-register" class="warning-text"></p>
+	</div>
+</body>
+
 </html>

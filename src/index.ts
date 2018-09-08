@@ -10,8 +10,17 @@ const databaseConfig = {
   database: process.env.DB_NAME
 };
 
-const app = new App(databaseConfig).express;
+const appWithDB = new App(databaseConfig);
+const app = appWithDB.express;
 
 app.listen(3000, () => {
   console.log("App is listening on port " + 3000);
+});
+
+process.on('SIGINT', () => {
+  appWithDB.closeAllConnections().then((response) => {
+    console.log(response);
+    console.log('Server shut down.')
+    process.exit();
+  });
 });

@@ -1,7 +1,7 @@
 const updateWordCount = () => {
   const wordCount = (<HTMLInputElement>document.getElementById('story')).value.length;
   const warningElement = document.getElementById('word-count');
-  warningElement.innerHTML = `Number of characters: ${wordCount.toString()}/500`;
+  warningElement.innerHTML = `Number of characters: ${wordCount.toString()}/250`;
 }
 
 const addStory = (finishStory = false) => {
@@ -71,7 +71,7 @@ const login = () => {
         return;
       };
       document.cookie = `jwtCookie=${data.token}`;
-      document.location.href = '/dashboard';
+      document.location.href = '/dashboard';      
     })
     .catch(error => console.error(`Fetch Error =\n`, error));
 };

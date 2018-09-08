@@ -14,6 +14,7 @@ const jwt = require('jsonwebtoken');
 // database queries unsecure
 // cookie-parser for secure cookies?
 // escape chars for quotes
+// clsoe sql connection
 
 const jwtSecret = 'abc';
 
@@ -21,23 +22,30 @@ const saltRounds = 10;
 
 const publicPath = path.join(__dirname, "public");
 
-const validateText = (textValue, formName) => {
+const validateUsername = (textValue, formName) => {
   if (!(typeof textValue === 'string'))  return `${formName} must be text.`;
   if (textValue.length === 0) return `${formName} cannot be empty.`;
-  // const matchValidBasicUsername = textValue.match(/^[a-zA-Z0-9_ .-]*$/);
-  const matchValidExtended = textValue.match(/^[a-zA-Z0-9_ .,!;()$-]*$/);
-  if (!matchValidExtended) return `${formName} cannot contain any weird characters only these: A-Z 0-9 _.,!;()$-.`; 
+  const matchValidBasicUsername = textValue.match(/^[a-zA-Z0-9_ .-]*$/);
+  if (!matchValidBasicUsername) return `${formName} can only contain basic letters and numbers.`; 
   return true;
 };
 
-const validateNumber = (numberValue, formName, min, max) => {
-  if (isNaN(numberValue)) return `${formName} must be a number.`;
-  if (numberValue % 1 !== 0) return `${formName} cannot be a decimal or fraction.`;
-  if (min && max) {
-      if (numberValue < min || numberValue > max) return `${formName} must be between ${min} and ${max}.`;
-  }
+const validateStory = (textValue, formName) => {
+  if (!(typeof textValue === 'string'))  return `${formName} must be text.`;
+  if (textValue.length === 0) return `${formName} cannot be empty.`;
+  const matchValidExtended = textValue.match(/^[a-zA-Z0-9\r\n_ .,!;()?&'$-]*$/);
+  if (!matchValidExtended) return `${formName} cannot contain double quotes or weird punctuation.`;
   return true;
 };
+
+// const validateNumber = (numberValue, formName, min, max) => {
+//   if (isNaN(numberValue)) return `${formName} must be a number.`;
+//   if (numberValue % 1 !== 0) return `${formName} cannot be a decimal or fraction.`;
+//   if (min && max) {
+//       if (numberValue < min || numberValue > max) return `${formName} must be between ${min} and ${max}.`;
+//   }
+//   return true;
+// };
 
 class App {
   public express;
@@ -58,13 +66,13 @@ class App {
     hbs.registerPartials(publicPath + "/views/partials");
 
     hbs.registerHelper('lastXwords', (storyText, numWords) => {
-      if (!storyText || !numWords) return new hbs.SafeString(`<p>(New story)</p>`);
-      let words = '';
+      if (!storyText || !numWords) return new hbs.SafeString(``);
+      let words: string = '';
       const storyArray = storyText.split(' ');
       for (let i = (storyArray.length - numWords); i < storyArray.length; i += 1) {
         if (!!storyArray[i]) words = `${words} ${storyArray[i]}`;
       }
-      return new hbs.SafeString(`<p>${words}</p>`);
+      return new hbs.SafeString(`${words.trim()}`);
     });
   }
 
@@ -102,7 +110,7 @@ class App {
               const reducer = (accumulator, storyPortion) => accumulator + storyPortion.story_text.length;
               totalLength = storyPortionResult.reduce(reducer, 0);
             }
-            const finishButton = totalLength > 1000 ? true : false;
+            const finishButton = totalLength > 500 ? true : false;
 
             const hbsArgs = {
               user: req.username,
@@ -141,9 +149,7 @@ class App {
           }
           res.status(200).render(publicPath + "/views/fullstory.hbs", { user: req.username, allStories });
         })
-        .catch(err => {
-          console.log(err);
-        });
+        .catch(err => { console.log(err); });
     });
 
     router.get("/login", authenticate, (req, res) => {
@@ -156,7 +162,12 @@ class App {
 
     router.get("/dashboard", authenticate, (req, res) => {
       if (!req.username) return res.status(401).send();
-      res.status(200).render(publicPath + "/views/dashboard.hbs", { user: req.username, status: `Logged in as ${req.username}` });
+
+      this.sql.runQuery(`SELECT * from story_portions WHERE author_username = '${req.username}'`)
+        .then(result => {
+          res.status(200).render(publicPath + "/views/dashboard.hbs", { user: req.username, numberOfStories: result.length });
+        })
+        .catch(err => { console.log(err); });
     });
 
     // BUILD DATABASE
@@ -170,23 +181,24 @@ class App {
     // POST
 
     router.post("/addstory", authenticate, (req, res) => {
-      let formError = validateText(req.body.story, 'Story');
+      let formError = validateStory(req.body.story, 'Story');
       if (typeof formError === 'string') return res.header('x-auth', 'error').send({ error: formError });
 
       if (!req.body.storyID) {
-        let formError = validateText(req.body.title, 'Title');
+        let formError = validateStory(req.body.title, 'Title');
         if (typeof formError === 'string') return res.header('x-auth', 'error').send({ error: formError });
       }
 
       const currentDateAndTime = new Date().toISOString().split("T");
       const currentDateAndTimeSqlFormat = `${currentDateAndTime[0]} ${currentDateAndTime[1].split(".")[0]}`;
 
-      const title = req.body.title;
       const storyID = req.body.storyID || uniqid();
+      const title = req.body.title && req.body.title.replace(`'`, `\'`);
+      const storyText = req.body.story.replace(`'`, `\'`);
 
-      this.sql.runQuery(`INSERT INTO stories (id, title, finished) VALUES ('${storyID}', '${title}', ${false}) ON DUPLICATE KEY UPDATE finished = ${req.body.finishStory}`)
+      this.sql.runQuery(`INSERT INTO stories (id, title, finished) VALUES ("${storyID}", "${title}", ${false}) ON DUPLICATE KEY UPDATE finished = ${req.body.finishStory}`)
         .then(insertResult => {
-          this.sql.runQuery(`INSERT INTO story_portions (id, story_text, num_words, date_added, story_id, author_username) VALUES ('${uniqid()}', '${req.body.story}', ${req.body.numWords}, '${currentDateAndTimeSqlFormat}', '${storyID}', '${req.username}')`)
+          this.sql.runQuery(`INSERT INTO story_portions (id, story_text, num_words, date_added, story_id, author_username) VALUES ("${uniqid()}", "${storyText}", ${req.body.numWords}, "${currentDateAndTimeSqlFormat}", "${storyID}", "${req.username}")`)
           .then(result => {
             res.header('x-auth', 'success').send({});
           })
@@ -196,6 +208,12 @@ class App {
     });
 
     router.post("/login", (req, res) => {
+      let formError = validateUsername(req.body.username, 'Username');
+      if (typeof formError === 'string') return res.header('x-auth', 'error').send({ error: formError });
+
+      formError = validateUsername(req.body.password, 'Password');
+      if (typeof formError === 'string') return res.header('x-auth', 'error').send({ error: formError });
+
       this.sql.runQuery(`SELECT password FROM users WHERE username = '${req.body.username}'`)
         .then(result => {
           if (result.length > 0) {
@@ -212,13 +230,14 @@ class App {
             res.header('x-auth', 'error').send({ error: 'Username not found.' });
           }
         })
-        .catch(err => {
-          console.log(err);
-        });
+        .catch(err => { console.log(err); });
     });
 
     router.post("/register", (req, res) => {
-      let formError = validateText(req.body.username, 'Username');
+      let formError = validateUsername(req.body.username, 'Username');
+      if (typeof formError === 'string') return res.header('x-auth', 'error').send({ error: formError });
+
+      formError = validateUsername(req.body.password, 'Password');
       if (typeof formError === 'string') return res.header('x-auth', 'error').send({ error: formError });
 
       this.sql.runQuery(`SELECT username FROM users WHERE username = '${req.body.username}'`)
@@ -233,9 +252,7 @@ class App {
                 currentUser.generateAuthToken(jwtSecret);
                 res.header('x-auth', currentUser.token).send({ token: currentUser.token });
               })
-              .catch(err => {
-                console.log(err);
-              });
+              .catch(err => { console.log(err); });
             });
           }
         })
@@ -248,6 +265,10 @@ class App {
   connectToDatabase(config) {
     this.sql = new SQLHandler(config);
     this.sql.connect();
+  }
+
+  closeAllConnections() {
+    return this.sql.closeAllConnections();
   }
 }
 

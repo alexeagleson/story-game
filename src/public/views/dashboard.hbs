@@ -2,8 +2,9 @@
 	{{> Head}}
 	<body>
         {{> Navbar dashboard='active'}}
-		<p>
-			{{ status }}
-		</p>
+		<div class="container">
+			<h2>Hello {{ user }}.</h2>
+			<p>You have contributed {{numberOfStories}} story pieces.</p>
+		</div>
 	</body>
 </html>

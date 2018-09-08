@@ -20,6 +20,15 @@ class SQLHandler {
       });
     });
   }
+
+  closeAllConnections() {
+    return new Promise((resolve, reject) => {
+      this.pool.end((error) => {
+        if (error) return reject(error);
+        resolve('All database connections closed');
+      });
+    });
+  }
 }
 
 export default SQLHandler;

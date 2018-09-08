@@ -1,12 +1,20 @@
 <html>
-	{{> Head}}
-	<body>
-        {{> Navbar home='active'}}
-		<h1>
-			Welcome to Story Game
-		</h1>
-		<p>
-			{{ status }}
-		</p>
-	</body>
+{{> Head}}
+
+<body>
+	{{> Navbar home='active'}}
+	<div class="container">
+		<p id="status-update"></p>
+		<h3>Welcome to StoryGame</h3>
+		<ul>
+			<li>Register an account (to keep track of your stories)</li>
+			<li>Click "Add New" to add a new story piece</li>
+			<li>Write stuff</li>
+			<li>Select how many words you want to show to the next player</li>
+			<li>250 chars max per submission.  After 500 characters the "finish story" option will appear when you submit.</li>
+			<li>That's it</li>
+		</ul>
+	</div>
+</body>
+
 </html>

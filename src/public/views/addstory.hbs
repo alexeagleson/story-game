@@ -1,9 +1,14 @@
 <html>
 	{{> Head}}
 	<body>
-        {{> Navbar addstory='active'}}
-		{{lastXwords storyPiece.story_text storyPiece.num_words}}
-        {{> StoryInput}}
-		<p id="error-addstory"></p>
+		{{> Navbar addstory='active'}}
+		<div class="container">
+			{{#if storyPiece.author_username}}
+				<h5><i>...{{lastXwords storyPiece.story_text storyPiece.num_words}}</strong></i></h5>
+				<small>(Previous author: {{storyPiece.author_username}})</small>
+			{{/if}}
+			{{> StoryInput}}
+			<p id="error-addstory" class="warning-text"></p>
+		</div>
 	</body>
 </html>
