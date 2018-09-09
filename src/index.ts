@@ -18,8 +18,8 @@ app.listen(3000, () => {
 });
 
 process.on('SIGINT', () => {
-  appWithDB.closeAllConnections().then((response) => {
-    console.log(response);
+  appWithDB.sql.pool.end((error) => {
+    console.log('All database connections closed');
     console.log('Server shut down.')
     process.exit();
   });
