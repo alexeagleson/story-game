@@ -7,6 +7,11 @@ a {
 #story {
   height: 200px; }
 
+#funny-button {
+  position: absolute;
+  z-index: 1;
+  display: none; }
+
 .container {
   padding-top: 30px; }
 

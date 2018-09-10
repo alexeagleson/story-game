@@ -67,7 +67,8 @@ class App {
     hbs.registerHelper('lastXwords', (storyText, numWords) => {
       if (!storyText || !numWords) return new hbs.SafeString(``);
       let words: string = '';
-      const storyArray = storyText.split(' ');
+      let storyArray = storyText.split(' ');
+      storyArray = storyArray.filter(storyPiece => storyPiece.length > 0);
       for (let i = (storyArray.length - numWords); i < storyArray.length; i += 1) {
         if (!!storyArray[i]) words = `${words} ${storyArray[i]}`;
       }
@@ -96,10 +97,10 @@ class App {
       if (!req.username) return res.status(401).send();
       let storyID = null;
 
-      this.sql.pool.query(`SELECT * FROM stories_test WHERE finished = ?`, [false], (error1, currentStoryResult, fields1) => {
+      this.sql.pool.query(`SELECT * FROM stories WHERE finished = ?`, [false], (error1, currentStoryResult, fields1) => {
         if (currentStoryResult && currentStoryResult.length > 0) storyID = currentStoryResult[currentStoryResult.length - 1].id;
         
-        this.sql.pool.query(`SELECT * FROM story_portions_test WHERE story_id = ? ORDER BY date_added DESC`, [storyID], (error2, storyPortionResult, fields2) => {
+        this.sql.pool.query(`SELECT * FROM story_portions WHERE story_id = ? ORDER BY date_added DESC`, [storyID], (error2, storyPortionResult, fields2) => {
           let totalLength = 0;
           if (storyPortionResult && storyPortionResult.length > 0) {
             const reducer = (accumulator, storyPortion) => accumulator + storyPortion.story_text.length;
@@ -122,20 +123,20 @@ class App {
     router.get("/fullstory", authenticate, (req, res) => {
       if (!req.username) return res.status(401).send();
       
-      this.sql.pool.query(`SELECT * FROM story_portions INNER JOIN stories ON story_portions.story_id = stories.id WHERE stories.finished = 1 ORDER BY story_portions.date_added ASC`,
+      this.sql.pool.query(`SELECT story_portions.story_text, story_portions.id, stories.title FROM story_portions INNER JOIN stories ON story_portions.story_id = stories.id WHERE stories.finished = 1 ORDER BY story_portions.date_added ASC`,
       (error, storyPortionsResult, fields) => {
         const allStories = [];
         if (storyPortionsResult && storyPortionsResult.length > 0) {
-          let currentStory = '';
+          let currentStory = [];
           let currentTitle = storyPortionsResult[0].title;
 
           storyPortionsResult.forEach((storyPortion) => {
             if (currentTitle !== storyPortion.title) {
               allStories.push({title: currentTitle, story: currentStory});
               currentTitle = storyPortion.title;
-              currentStory = '';
+              currentStory = [];
             }
-            currentStory = `${currentStory} ${storyPortion.story_text}`;
+            currentStory.push({ story_portion: storyPortion.story_text, story_portion_id: storyPortion.id });
           });
           allStories.push({title: currentTitle, story: currentStory});
           allStories.reverse();
@@ -156,8 +157,11 @@ class App {
       if (!req.username) return res.status(401).send();
 
       this.sql.pool.query(`SELECT * from story_portions WHERE author_username = ?`, [req.username], (error, storyPortionsResult, fields) => {
-        if (!storyPortionsResult) res.status(200).render(publicPath + "/views/dashboard.hbs", { user: req.username, numberOfStories: 0 });
-        res.status(200).render(publicPath + "/views/dashboard.hbs", { user: req.username, numberOfStories: storyPortionsResult.length });
+        if (!storyPortionsResult) return res.status(200).render(publicPath + "/views/dashboard.hbs", { user: req.username, numberOfStories: 0 });
+        const reducer = (accumulator, storyPortion) => accumulator + storyPortion.liked;
+        const likedCount = storyPortionsResult.reduce(reducer, 0);
+        const mostPopularStory = storyPortionsResult.reduce((prev, current) => current.liked > prev.liked ? current : prev);
+        res.status(200).render(publicPath + "/views/dashboard.hbs", { user: req.username, numberOfStories: storyPortionsResult.length, likedCount, mostPopularStory: mostPopularStory.story_text });
       });
     });
 
@@ -166,7 +170,7 @@ class App {
     router.get("/createstoriestest", authenticate, (req, res) => {
       if (!req.username) return res.status(401).send();
 
-      this.sql.pool.query(`CREATE TABLE stories_test 
+      this.sql.pool.query(`CREATE TABLE stories 
         (id CHAR(18),
         title VARCHAR(255),
         finished TINYINT(1),
@@ -178,13 +182,14 @@ class App {
     router.get("/createstoryportionstest", authenticate, (req, res) => {
       if (!req.username) return res.status(401).send();
 
-      this.sql.pool.query(`CREATE TABLE story_portions_test 
+      this.sql.pool.query(`CREATE TABLE story_portions 
           (id CHAR(18),
           story_text TEXT,
           num_words INT,
           date_added DATETIME,
           story_id CHAR(18),
           author_username VARCHAR(20),
+          liked INT,
           PRIMARY KEY (id))`, (error, result, fields) => {
             res.status(200).render(publicPath + "/views/index.hbs");
         });
@@ -200,9 +205,9 @@ class App {
       const storyID = req.body.storyID || uniqid();
       const storyText = firstLetterLowercase(req.body.story);
 
-      this.sql.pool.query(`INSERT INTO stories_test (id, title, finished) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE finished = ?`,
+      this.sql.pool.query(`INSERT INTO stories (id, title, finished) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE finished = ?`,
         [storyID, req.body.title, false, req.body.finishStory], (error1, insertResult, fields1) => {
-          this.sql.pool.query(`INSERT INTO story_portions_test (id, story_text, num_words, date_added, story_id, author_username) VALUES (?, ?, ?, ?, ?, ?)`,
+          this.sql.pool.query(`INSERT INTO story_portions (id, story_text, num_words, date_added, story_id, author_username) VALUES (?, ?, ?, ?, ?, ?)`,
           [uniqid(), storyText, req.body.numWords, currentDateAndTimeSqlFormat, storyID, req.username], (error2, insertResult2, fields2) => {
             res.header('x-auth', 'success').send({});
           });
@@ -254,6 +259,12 @@ class App {
       });
     });
 
+    router.post("/markfunny", authenticate, (req, res) => {
+      this.sql.pool.query(`UPDATE story_portions SET liked = liked + 1 WHERE id = ?`, [req.body.story_portion_id], (error, updateResult, fields) => {
+        res.header('x-auth', 'success').send({ success: true });
+      });
+    });
+
     this.express.use("/", router);
   }
 
@@ -271,3 +282,7 @@ export default App;
 // fix SQL injection
 // fix undefined user
 // lowercase first letter
+// added stories
+// added funny
+// more stats
+// fixed number of words

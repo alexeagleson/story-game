@@ -12,9 +12,19 @@ a {
   height: 200px;
 }
 
+#funny-button {
+  position: absolute;
+  z-index: 1;
+  display: none;
+}
+
 .container {
   padding-top: 30px;
 }
+
+// .story_portion:hover {
+//   color: red;
+// }
 
 .warning-text {
   padding-top: 10px;
