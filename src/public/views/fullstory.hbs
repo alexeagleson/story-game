@@ -9,9 +9,11 @@
             {{#each story}}
                 <span id="{{story_portion_id}}" class="story_portion" onclick="showFunnyButton(event)">{{story_portion}}</span>
             {{/each}}
+            <br>
+            <small><i><strong>Authors:</strong> {{authors}}</i></small>
             <br><br>
         {{/each}}
-        <button id="funny-button" class="btn btn-secondary" onclick="funnyConfirm(event)">FUNNY</button>
+        <button id="funny-button" class="btn btn-success" onclick="funnyConfirm(event)">FUNNY</button>
     </div>
 </body>
 </html>

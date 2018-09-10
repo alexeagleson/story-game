@@ -9,31 +9,29 @@ const bodyParser = require('body-parser')
 const uniqid = require('uniqid');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-
-/// jwt secret unsecure
-// database queries unsecure
 // cookie-parser for secure cookies?
 
-const jwtSecret = 'sadsaf7292mde963329';
+const jwtSecret = 'sadsaf7dsasd292mde963329';
 const saltRounds = 10;
 
 const publicPath = path.join(__dirname, "public");
 
-const validateUsername = (textValue, formName) => {
+const validateUsername = (textValue: string, formName: string, min: number = null, max: number = null) => {
   if (!(typeof textValue === 'string'))  return `${formName} must be text.`;
   if (textValue.length === 0) return `${formName} cannot be empty.`;
+  if ((min !== null && max !== null) && (textValue.length < min || textValue.length > max)) return `${formName} must be between ${min} and ${max} characters long.`;
   const matchValidBasicUsername = textValue.match(/^[a-zA-Z0-9_ .-]*$/);
   if (!matchValidBasicUsername) return `${formName} can only contain basic letters and numbers.`; 
   return true;
 };
 
-const validateStory = (textValue, formName) => {
-  if (!(typeof textValue === 'string'))  return `${formName} must be text.`;
-  if (textValue.length === 0) return `${formName} cannot be empty.`;
-  const matchValidExtended = textValue.match(/^[a-zA-Z0-9\r\n_ .,!;()?&'$-]*$/);
-  if (!matchValidExtended) return `${formName} cannot contain double quotes or weird punctuation.`;
-  return true;
-};
+// const validateStory = (textValue, formName) => {
+//   if (!(typeof textValue === 'string'))  return `${formName} must be text.`;
+//   if (textValue.length === 0) return `${formName} cannot be empty.`;
+//   const matchValidExtended = textValue.match(/^[a-zA-Z0-9\r\n_ .,!;()?&'$-]*$/);
+//   if (!matchValidExtended) return `${formName} cannot contain double quotes or weird punctuation.`;
+//   return true;
+// };
 
 // const validateNumber = (numberValue, formName, min, max) => {
 //   if (isNaN(numberValue)) return `${formName} must be a number.`;
@@ -84,17 +82,18 @@ class App {
       if (!token) return next();
       const decodedID = jwt.verify(token, jwtSecret);
       this.sql.pool.query(`SELECT username FROM users WHERE username = ?`, [decodedID], (error, usernameResult, fields) => {
-        req.username = usernameResult[0].username;
+        req.username = (usernameResult[0] && usernameResult[0].username) || null;
         next();
       });
     };
 
     router.get("/", authenticate, (req, res) => {
+      if (!(req && req.username)) return res.status(200).render(publicPath + "/views/login.hbs", { registerOrLoginFunction: 'login()' });
       res.status(200).render(publicPath + "/views/index.hbs", { user: req.username });
     });
 
     router.get("/addstory", authenticate, (req, res) => {
-      if (!req.username) return res.status(401).send();
+      if (!(req && req.username)) return res.status(200).render(publicPath + "/views/login.hbs", { registerOrLoginFunction: 'login()' });
       let storyID = null;
 
       this.sql.pool.query(`SELECT * FROM stories WHERE finished = ?`, [false], (error1, currentStoryResult, fields1) => {
@@ -121,54 +120,58 @@ class App {
     });
 
     router.get("/fullstory", authenticate, (req, res) => {
-      if (!req.username) return res.status(401).send();
+      if (!(req && req.username)) return res.status(200).render(publicPath + "/views/login.hbs", { registerOrLoginFunction: 'login()' });
       
-      this.sql.pool.query(`SELECT story_portions.story_text, story_portions.id, stories.title FROM story_portions INNER JOIN stories ON story_portions.story_id = stories.id WHERE stories.finished = 1 ORDER BY story_portions.date_added ASC`,
+      this.sql.pool.query(`SELECT story_portions.story_text, story_portions.id, story_portions.author_username, stories.title FROM story_portions INNER JOIN stories ON story_portions.story_id = stories.id WHERE stories.finished = 1 ORDER BY story_portions.date_added ASC`,
       (error, storyPortionsResult, fields) => {
         const allStories = [];
         if (storyPortionsResult && storyPortionsResult.length > 0) {
           let currentStory = [];
           let currentTitle = storyPortionsResult[0].title;
+          let uniqueAuthors = [];
 
           storyPortionsResult.forEach((storyPortion) => {
             if (currentTitle !== storyPortion.title) {
-              allStories.push({title: currentTitle, story: currentStory});
+              allStories.push({ title: currentTitle, story: currentStory, authors: uniqueAuthors });
               currentTitle = storyPortion.title;
               currentStory = [];
+              uniqueAuthors = [];
             }
+            if (!uniqueAuthors.find(author => author === storyPortion.author_username)) uniqueAuthors.push(storyPortion.author_username);
             currentStory.push({ story_portion: storyPortion.story_text, story_portion_id: storyPortion.id });
           });
-          allStories.push({title: currentTitle, story: currentStory});
+          allStories.push({ title: currentTitle, story: currentStory, authors: uniqueAuthors });
           allStories.reverse();
         }
         res.status(200).render(publicPath + "/views/fullstory.hbs", { user: req.username, allStories });
       });
     });
 
-    router.get("/login", authenticate, (req, res) => {
-      res.status(200).render(publicPath + "/views/login.hbs", { user: req.username, registerOrLoginFunction: 'login()' });
+    router.get("/login", (req, res) => {
+      res.status(200).render(publicPath + "/views/login.hbs", { registerOrLoginFunction: 'login()' });
     });
 
-    router.get("/register", authenticate, (req, res) => {
-      res.status(200).render(publicPath + "/views/register.hbs", { user: req.username, registerOrLoginFunction: 'register()' });
+    router.get("/register", (req, res) => {
+      res.status(200).render(publicPath + "/views/register.hbs", { registerOrLoginFunction: 'register()' });
     });
 
     router.get("/dashboard", authenticate, (req, res) => {
-      if (!req.username) return res.status(401).send();
+      if (!(req && req.username)) return res.status(200).render(publicPath + "/views/login.hbs", { registerOrLoginFunction: 'login()' });
 
       this.sql.pool.query(`SELECT * from story_portions WHERE author_username = ?`, [req.username], (error, storyPortionsResult, fields) => {
-        if (!storyPortionsResult) return res.status(200).render(publicPath + "/views/dashboard.hbs", { user: req.username, numberOfStories: 0 });
+        if (!(storyPortionsResult && storyPortionsResult.length > 0)) return res.status(200).render(publicPath + "/views/dashboard.hbs", { user: req.username, numberOfStories: 0, likedCount: 0, mostPopularStory: 'aint written anything yet' });
         const reducer = (accumulator, storyPortion) => accumulator + storyPortion.liked;
         const likedCount = storyPortionsResult.reduce(reducer, 0);
-        const mostPopularStory = storyPortionsResult.reduce((prev, current) => current.liked > prev.liked ? current : prev);
-        res.status(200).render(publicPath + "/views/dashboard.hbs", { user: req.username, numberOfStories: storyPortionsResult.length, likedCount, mostPopularStory: mostPopularStory.story_text });
+        const sortedLiked = storyPortionsResult.sort((a, b) => a.liked > b.liked);
+        const topThreeLiked = sortedLiked.slice(3).reverse() || null;
+        res.status(200).render(publicPath + "/views/dashboard.hbs", { user: req.username, numberOfStories: storyPortionsResult.length, likedCount, topThreeLiked });
       });
     });
 
     // BUILD DATABASE
 
-    router.get("/createstoriestest", authenticate, (req, res) => {
-      if (!req.username) return res.status(401).send();
+    router.get("/createtablestories", authenticate, (req, res) => {
+      if (!(req && req.username)) return res.status(401).send();
 
       this.sql.pool.query(`CREATE TABLE stories 
         (id CHAR(18),
@@ -179,8 +182,8 @@ class App {
       });
     });
 
-    router.get("/createstoryportionstest", authenticate, (req, res) => {
-      if (!req.username) return res.status(401).send();
+    router.get("/createtablestoryportions", authenticate, (req, res) => {
+      if (!(req && req.username)) return res.status(401).send();
 
       this.sql.pool.query(`CREATE TABLE story_portions 
           (id CHAR(18),
@@ -195,10 +198,21 @@ class App {
         });
     });
 
+    router.get("/createtableusers", authenticate, (req, res) => {
+      if (!(req && req.username)) return res.status(401).send();
+
+      this.sql.pool.query(`CREATE TABLE story_portions 
+          (username VARCHAR(20),
+          password CHAR(60),
+          PRIMARY KEY (username))`, (error, result, fields) => {
+            res.status(200).render(publicPath + "/views/index.hbs");
+        });
+    });
+
     // POST
 
     router.post("/addstory", authenticate, (req, res) => {
-      if (!req.username) return res.status(401).send();
+      if (!(req && req.username)) return res.status(401).send();
 
       const currentDateAndTime = new Date().toISOString().split("T");
       const currentDateAndTimeSqlFormat = `${currentDateAndTime[0]} ${currentDateAndTime[1].split(".")[0]}`;
@@ -215,11 +229,9 @@ class App {
     });
 
     router.post("/login", (req, res) => {
-      let formError = validateUsername(req.body.username, 'Username');
+      let formError = validateUsername(req.body.username, 'Username', 1, 20);
       if (typeof formError === 'string') return res.header('x-auth', 'error').send({ error: formError });
 
-      formError = validateUsername(req.body.password, 'Password');
-      if (typeof formError === 'string') return res.header('x-auth', 'error').send({ error: formError });
       this.sql.pool.query(`SELECT password FROM users WHERE username = ?`, [req.body.username], (error, passwordResult, fields) => {
         if (passwordResult && passwordResult.length > 0) {
           bcrypt.compare(req.body.password, passwordResult[0].password).then((compareResult) => {
@@ -238,10 +250,7 @@ class App {
     });
 
     router.post("/register", (req, res) => {
-      let formError = validateUsername(req.body.username, 'Username');
-      if (typeof formError === 'string') return res.header('x-auth', 'error').send({ error: formError });
-
-      formError = validateUsername(req.body.password, 'Password');
+      let formError = validateUsername(req.body.username, 'Username', 1, 20);
       if (typeof formError === 'string') return res.header('x-auth', 'error').send({ error: formError });
 
       this.sql.pool.query(`SELECT username FROM users WHERE username = ?`, [req.body.username], (error, checkUsername, fields) => {
@@ -260,6 +269,8 @@ class App {
     });
 
     router.post("/markfunny", authenticate, (req, res) => {
+      if (!(req && req.username)) res.header('x-auth', 'success').send({ success: false });
+      
       this.sql.pool.query(`UPDATE story_portions SET liked = liked + 1 WHERE id = ?`, [req.body.story_portion_id], (error, updateResult, fields) => {
         res.header('x-auth', 'success').send({ success: true });
       });
@@ -277,12 +288,3 @@ class App {
 export default App;
 
 
-
-// remove first caps
-// fix SQL injection
-// fix undefined user
-// lowercase first letter
-// added stories
-// added funny
-// more stats
-// fixed number of words

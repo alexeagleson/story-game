@@ -6,8 +6,16 @@
 			<h2>Hello {{ user }}.</h2>
 			<p>You have contributed <strong>{{numberOfStories}}</strong> story snippets.</p>
 			<p>Friends have said your stories are FUNNY <strong>{{likedCount}}</strong> times.</p>
-			<p>Your most popular story snippet is:</p>
-			<p><i>"{{mostPopularStory}}..."</i></p>
+			<p>Your top 3 most FUNNY story snippets are:</p>
+			<ul>
+				{{#if topThreeLiked}}
+					{{#each topThreeLiked}}
+						<li>[{{liked}}] <i>{{story_text}}</i></li>
+					{{/each}}
+				{{else}}
+					<li>You haven't submitted any story snippets yet.</li>
+				{{/if}}
+			</ul>
 		</div>
 	</body>
 </html>

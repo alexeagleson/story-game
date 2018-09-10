@@ -1,3 +1,5 @@
+let funnyPending = false;
+
 const updateWordCount = () => {
   const wordCount = (<HTMLInputElement>document.getElementById('story')).value.length;
   const warningElement = document.getElementById('word-count');
@@ -89,6 +91,8 @@ const showFunnyButton = (e) => {
   funnyButton.style.left = `${e.pageX}px`
   funnyButton.style.top = `${e.pageY}px`
   funnyButton['targetid'] = target.id;
+  target.style.color = 'red';
+  setTimeout(() => { target.style.color = 'black'; }, 1000);
 };
 
 const hideFunnyButton = (e) => {
@@ -103,6 +107,9 @@ const funnyConfirm = (e) => {
   e = e || window.event;
   const target = e.target || e.srcElement;
 
+  if (funnyPending) return;
+  funnyPending = true;
+
   fetch(`/markfunny`, {
     method: "POST",
     headers: { "Content-Type": "application/json; charset=utf-8" },
@@ -110,7 +117,7 @@ const funnyConfirm = (e) => {
   })
     .then(response => response.json())
     .then(data => {
-      if (data.success) document.location.href = '/fullstory';
+      funnyPending = false;
     })
     .catch(error => console.error(`Fetch Error =\n`, error));
 };
