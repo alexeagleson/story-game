@@ -10,10 +10,15 @@
     </div>
     <div class="row">
         <div class="form-group col">
-            <textarea class="form-control" id="story" name="story" onkeyup="updateWordCount()" maxlength="250"></textarea>
-            <small id="word-count" class="form-text text-muted">Number of characters: 0/250</small>
+            <textarea class="form-control" id="story" name="story" onkeyup="updateWordCount()" maxlength="350"></textarea>
+            <small id="word-count" class="form-text text-muted">Number of characters: 0/350</small>
         </div>
     </div>
+    <div class="row">
+        <div class="form-group col">
+            <small id="authors" class="form-text text-muted">Story length {{totalLength}} characters. Authors: {{uniqueAuthors}}.</small>
+        </div>
+    </div> 
     <div class="row">
         <div class="form-group col-md-3">
             <label for="numWords"># Words to Show Next Player</label>
@@ -30,9 +35,9 @@
     <div class="row">
         <div class="col">
             <input type="hidden" id="storyID" name="storyID" value="{{storyID}}">
-            <button id="story-submit" type="submit" class="btn btn-primary" onclick="addStory()">Submit</button>
+            <button id="story-submit" type="submit" class="btn btn-primary" onclick="addStory()">Add To Story</button>
             {{#if finishButton}}
-                <button id="story-finish" type="submit" class="btn btn-success" onclick="finishStory()">Finish Story</button>
+                <button id="story-finish" type="submit" class="btn btn-danger" onclick="finishStory()">Finish and End Story</button>
             {{/if}}
         </div>
     </div>

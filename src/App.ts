@@ -88,12 +88,12 @@ class App {
     };
 
     router.get("/", authenticate, (req, res) => {
-      if (!(req && req.username)) return res.status(200).render(publicPath + "/views/login.hbs", { registerOrLoginFunction: 'login()' });
+      if (!(req && req.username)) return res.status(200).render(publicPath + "/views/login.hbs");
       res.status(200).render(publicPath + "/views/index.hbs", { user: req.username });
     });
 
     router.get("/addstory", authenticate, (req, res) => {
-      if (!(req && req.username)) return res.status(200).render(publicPath + "/views/login.hbs", { registerOrLoginFunction: 'login()' });
+      if (!(req && req.username)) return res.status(200).render(publicPath + "/views/login.hbs");
       let storyID = null;
 
       this.sql.pool.query(`SELECT * FROM stories WHERE finished = ?`, [false], (error1, currentStoryResult, fields1) => {
@@ -105,7 +105,13 @@ class App {
             const reducer = (accumulator, storyPortion) => accumulator + storyPortion.story_text.length;
             totalLength = storyPortionResult.reduce(reducer, 0);
           }
-          const finishButton = totalLength > 500 ? true : false;
+          const finishButton = totalLength > 1000 ? true : false;
+
+          let uniqueAuthors = [];
+
+          storyPortionResult.forEach((storyPortion) => {
+            if (!uniqueAuthors.find(author => author === storyPortion.author_username)) uniqueAuthors.push(storyPortion.author_username);
+          });
 
           const hbsArgs = {
             user: req.username,
@@ -113,6 +119,8 @@ class App {
             storyID,
             titleNeeded: !storyID,
             finishButton,
+            uniqueAuthors,
+            totalLength,
           }
           res.status(200).render(publicPath + "/views/addstory.hbs", hbsArgs);
         });
@@ -120,7 +128,7 @@ class App {
     });
 
     router.get("/fullstory", authenticate, (req, res) => {
-      if (!(req && req.username)) return res.status(200).render(publicPath + "/views/login.hbs", { registerOrLoginFunction: 'login()' });
+      if (!(req && req.username)) return res.status(200).render(publicPath + "/views/login.hbs");
       
       this.sql.pool.query(`SELECT story_portions.story_text, story_portions.id, story_portions.author_username, stories.title FROM story_portions INNER JOIN stories ON story_portions.story_id = stories.id WHERE stories.finished = 1 ORDER BY story_portions.date_added ASC`,
       (error, storyPortionsResult, fields) => {
@@ -148,22 +156,22 @@ class App {
     });
 
     router.get("/login", (req, res) => {
-      res.status(200).render(publicPath + "/views/login.hbs", { registerOrLoginFunction: 'login()' });
+      res.status(200).render(publicPath + "/views/login.hbs");
     });
 
     router.get("/register", (req, res) => {
-      res.status(200).render(publicPath + "/views/register.hbs", { registerOrLoginFunction: 'register()' });
+      res.status(200).render(publicPath + "/views/register.hbs");
     });
 
     router.get("/dashboard", authenticate, (req, res) => {
-      if (!(req && req.username)) return res.status(200).render(publicPath + "/views/login.hbs", { registerOrLoginFunction: 'login()' });
+      if (!(req && req.username)) return res.status(200).render(publicPath + "/views/login.hbs");
 
       this.sql.pool.query(`SELECT * from story_portions WHERE author_username = ?`, [req.username], (error, storyPortionsResult, fields) => {
         if (!(storyPortionsResult && storyPortionsResult.length > 0)) return res.status(200).render(publicPath + "/views/dashboard.hbs", { user: req.username, numberOfStories: 0, likedCount: 0, mostPopularStory: 'aint written anything yet' });
         const reducer = (accumulator, storyPortion) => accumulator + storyPortion.liked;
         const likedCount = storyPortionsResult.reduce(reducer, 0);
-        const sortedLiked = storyPortionsResult.sort((a, b) => a.liked > b.liked);
-        const topThreeLiked = sortedLiked.slice(3).reverse() || null;
+        const sortedLiked = storyPortionsResult.sort((a, b) => a.liked > b.liked).reverse();
+        const topThreeLiked = sortedLiked.slice(0, 3)|| null;
         res.status(200).render(publicPath + "/views/dashboard.hbs", { user: req.username, numberOfStories: storyPortionsResult.length, likedCount, topThreeLiked });
       });
     });
@@ -219,24 +227,29 @@ class App {
       const storyID = req.body.storyID || uniqid();
       const storyText = firstLetterLowercase(req.body.story);
 
+
+
       this.sql.pool.query(`INSERT INTO stories (id, title, finished) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE finished = ?`,
-        [storyID, req.body.title, false, req.body.finishStory], (error1, insertResult, fields1) => {
-          this.sql.pool.query(`INSERT INTO story_portions (id, story_text, num_words, date_added, story_id, author_username) VALUES (?, ?, ?, ?, ?, ?)`,
-          [uniqid(), storyText, req.body.numWords, currentDateAndTimeSqlFormat, storyID, req.username], (error2, insertResult2, fields2) => {
+      [storyID, req.body.title, false, req.body.completeStory], (error2, insertResult, fields2) => {
+        this.sql.pool.query(`INSERT INTO story_portions (id, story_text, num_words, date_added, story_id, author_username) VALUES (?, ?, ?, ?, ?, ?)`,
+        [uniqid(), storyText, req.body.numWords, currentDateAndTimeSqlFormat, storyID, req.username], (error2, insertResult2, fields2) => {
+          this.sql.pool.query(`UPDATE stories SET finished = ? WHERE id = ?`,
+          [req.body.completeStory, storyID], (error3, updateResult, fields3) => {
             res.header('x-auth', 'success').send({});
           });
         });
+      });
     });
 
     router.post("/login", (req, res) => {
-      let formError = validateUsername(req.body.username, 'Username', 1, 20);
+      let formError = validateUsername(req.body.data.username, 'Username', 1, 20);
       if (typeof formError === 'string') return res.header('x-auth', 'error').send({ error: formError });
 
-      this.sql.pool.query(`SELECT password FROM users WHERE username = ?`, [req.body.username], (error, passwordResult, fields) => {
+      this.sql.pool.query(`SELECT password FROM users WHERE username = ?`, [req.body.data.username], (error, passwordResult, fields) => {
         if (passwordResult && passwordResult.length > 0) {
-          bcrypt.compare(req.body.password, passwordResult[0].password).then((compareResult) => {
+          bcrypt.compare(req.body.data.password, passwordResult[0].password).then((compareResult) => {
             if (compareResult) {
-              const currentUser = new User(req.body.username);
+              const currentUser = new User(req.body.data.username);
               currentUser.generateAuthToken(jwtSecret);
               res.header('x-auth', currentUser.token).send({ token: currentUser.token });
             } else {

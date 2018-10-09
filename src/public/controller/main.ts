@@ -1,12 +1,14 @@
 let funnyPending = false;
 
+const axios = window['axios'];
+
 const updateWordCount = () => {
   const wordCount = (<HTMLInputElement>document.getElementById('story')).value.length;
   const warningElement = document.getElementById('word-count');
-  warningElement.innerHTML = `Number of characters: ${wordCount.toString()}/250`;
+  warningElement.innerHTML = `Number of characters: ${wordCount.toString()}/350}`;
 }
 
-const addStory = (finishStory = false) => {
+const addStory = (completeStory = false) => {
   const storyInput = (<HTMLInputElement>document.getElementById('story')).value;
   const numWordsInput = (<HTMLInputElement>document.getElementById('numWords')).value;
   const storyIDInput = (<HTMLInputElement>document.getElementById('storyID')).value;
@@ -17,7 +19,7 @@ const addStory = (finishStory = false) => {
   fetch(`/addstory`, {
     method: "POST",
     headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify({ story: storyInput, numWords: numWordsInput, storyID: storyIDInput, finishStory, title: titleInput })
+    body: JSON.stringify({ story: storyInput, numWords: numWordsInput, storyID: storyIDInput, completeStory, title: titleInput })
   })
     .then(response => response.json())
     .then(data => {
@@ -25,6 +27,17 @@ const addStory = (finishStory = false) => {
         document.getElementById('error-addstory').innerHTML = data.error;
         return;
       };
+
+      const discordMessage = completeStory ? 'A new story has been finished!' : 'The story has been updated.';
+
+      axios.post('https://discordapp.com/api/webhooks/499340810240786462/4C3w250HfRD4K9dp9Esange0vfTJekWVyzC2UXN7CsPbDdtcn4zoUJCFtSd-n7PNPoTE', {
+        content: discordMessage
+      })
+      .then(function (response) {})
+      .catch(function (error) {
+        console.log(error);
+      });
+
       document.location.href = '/';
     })
     .catch(error => console.error(`Fetch Error =\n`, error));
@@ -59,23 +72,22 @@ const login = () => {
   const usernameInput = (<HTMLInputElement>document.getElementById('username')).value;
   const passwordInput = (<HTMLInputElement>document.getElementById('password')).value;
 
-  fetch(`/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify({ username: usernameInput, password: passwordInput })
+  axios.post('/login', {
+    data: { username: usernameInput, password: passwordInput }
   })
-    .then(response => response.json())
-    .then(data => {
-      if (data.error) {
-        (<HTMLInputElement>document.getElementById('username')).value = '';
-        (<HTMLInputElement>document.getElementById('password')).value = '';
-        document.getElementById('error-login').innerHTML = data.error;
-        return;
-      };
-      document.cookie = `jwtCookie=${data.token}`;
-      document.location.href = '/dashboard';      
-    })
-    .catch(error => console.error(`Fetch Error =\n`, error));
+  .then(function (response) {
+    if (response.data.error) {
+      (<HTMLInputElement>document.getElementById('username')).value = '';
+      (<HTMLInputElement>document.getElementById('password')).value = '';
+      document.getElementById('error-login').innerHTML = response.data.error;
+      return;
+    };
+    document.cookie = `jwtCookie=${response.data.token}`;
+    document.location.href = '/dashboard';    
+  })
+  .catch(function (error) {
+    console.log(error);
+  });
 };
 
 const logout = () => {
@@ -100,7 +112,7 @@ const hideFunnyButton = (e) => {
   const target = e.target || e.srcElement;
   if (target.className === 'story_portion') return;
   const funnyButton = document.getElementById('funny-button');
-  funnyButton.style.display = 'none';
+  if (funnyButton) funnyButton.style.display = 'none';
 };
 
 const funnyConfirm = (e) => {

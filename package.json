@@ -2,18 +2,19 @@
   "name": "alexapp",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "compile-scss": "node-sass src/public/styles/scss -o src/public/styles/css",
-    "copy-files": "copyfiles src/**/*.html src/**/*.hbs src/**/*.css dist/",
+    "copy-files": "copyfiles src/**/*.html src/**/*.hbs src/**/*.css src/**/*.js dist/",
     "compile-typescript": "tsc",
+    "compile-babel": "npx babel dist/src/public/controller/main.js --out-file dist/src/public/controller/main-babelized.js",
     "start": "node dist/src/index.js",
-    "all": "npm run compile-scss && npm run copy-files && npm run compile-typescript && npm run start"
+    "all": "npm run compile-scss && npm run copy-files && npm run compile-typescript && npm run compile-babel && npm run start"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "babel-cli": "^6.26.0",
     "bcrypt": "^3.0.0",
     "body-parser": "^1.18.3",
     "dotenv": "^6.0.0",
@@ -25,7 +26,11 @@
     "uniqid": "^5.0.3"
   },
   "devDependencies": {
+    "@babel/core": "^7.1.0",
+    "@babel/preset-env": "^7.1.0",
     "@types/node": "^10.9.4",
+    "babel-core": "^6.26.3",
+    "babel-preset-env": "^1.7.0",
     "copyfiles": "^2.0.0",
     "eslint": "^5.4.0",
     "eslint-config-airbnb": "^17.1.0",
@@ -34,6 +39,8 @@
     "eslint-plugin-react": "^7.11.1",
     "eslint-plugin-typescript": "^0.12.0",
     "typescript": "^3.0.3",
-    "typescript-eslint-parser": "^18.0.0"
+    "typescript-eslint-parser": "^18.0.0",
+    "webpack": "^4.19.0",
+    "webpack-cli": "^3.1.0"
   }
 }
